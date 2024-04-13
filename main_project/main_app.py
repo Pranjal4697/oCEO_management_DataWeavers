@@ -24,8 +24,8 @@ db = MySQL(app)
 
 @app.route('/google/<user_type>')
 def google(user_type):
-    GOOGLE_CLIENT_ID = "483725292816-7o6i235adoidqqhfv1hi0738paa4cfvr.apps.googleusercontent.com"
-    GOOGLE_CLIENT_SECRET = "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"
+    GOOGLE_CLIENT_ID 
+    GOOGLE_CLIENT_SECRET
     CONF_URL = 'https://accounts.google.com/.well-known/openid-configuration'  # Updated URL
  
     oauth.register(
