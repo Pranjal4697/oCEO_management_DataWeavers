@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session,jsonify
 from flask_mysqldb import MySQL
 from flask_bcrypt import Bcrypt
 import random
@@ -257,6 +257,7 @@ def after_login_student():
         roll_number = session['roll_number']
         cursor.execute(f"SELECT first_name FROM applied_student WHERE roll_number = {roll_number};")
         student_name = cursor.fetchone()[0]
+       
         cursor.close()
         return render_template('student/after_login.html', student_name=student_name) # student homepage
     
@@ -342,6 +343,9 @@ def student_edit_bank_details():
 
             if is_existing_roll_number:
                 update_query = f"UPDATE bank_details SET bank_name = '{bank_name}', account_number = {account_number}, IFSC_code = '{ifsc_code}' WHERE roll_number = {roll_number};"
+                print('###update_query###')
+                print(update_query)
+                print('###update_query###')
                 cursor.execute(update_query)
             else:
                 cursor.execute(f"INSERT INTO bank_details (roll_number, bank_name, account_number, IFSC_code) VALUES ({roll_number}, '{bank_name}', {account_number}, '{ifsc_code}');")
@@ -896,7 +900,8 @@ def professor_job_page(job_id):
                 return redirect(url_for('professor_stop_accepting_applications', job_id=job_id))
                         
         cursor = db.connection.cursor()
-        query_get_students_under_job = f"SELECT roll_number,first_name,middle_name,last_name,email_id FROM applied_student WHERE roll_number IN (SELECT roll_number FROM application_status WHERE job_id = {job_id} and approval='approved');"
+        # query_get_students_under_job = f"SELECT roll_number,first_name,middle_name,last_name,email_id FROM applied_student WHERE roll_number IN (SELECT roll_number FROM application_status WHERE job_id = {job_id} and approval='approved');"
+        query_get_students_under_job = "SELECT roll_number,first_name,middle_name,last_name,email_id FROM applied_student WHERE roll_number IN (SELECT roll_number FROM application_status WHERE job_id = @0 and approval='approved');"
         cursor.execute(query_get_students_under_job)
         student_under_job_data = cursor.fetchall()
         # cursor.execute("SHOW COLUMNS FROM job")
@@ -1268,7 +1273,7 @@ def others_login():
                 cursor.close()
 
                 if admin_email == email :
-                    return redirect(url_for("after_login_other", type = 'admin'))
+                    return redirect(url_for("after_login_admin"))
                 else:
                     return redirect(url_for("errorpage"))
             elif userType == 'Dean':
@@ -1557,7 +1562,148 @@ def review_application(type):
         return render_template('others/admin/review_application.html', application_data=application_data, application_head=column_names, type = type)
     else:
         return redirect(url_for('errorpage'))
- #---------------------------------------------Accounts---------------------------------------------------------  
+ #---------------------------------------------Admin---------------------------------------------------------  
+ #Admin page should have access to all jobs , all student and all faculty and all other users, and all applications
+
+@app.route('/login/after_login_admin', methods=['GET', 'POST'])
+def after_login_admin():
+    if "email" in session:
+        if request.method == 'POST':
+            testvar = request.form['submit_button']
+            match testvar:
+                case 'students':
+                    return redirect(url_for('students'))
+                case 'faculty':
+                    return redirect(url_for('faculty'))
+                case 'others':
+                    return redirect(url_for('others'))
+                case 'jobs':
+                    return redirect(url_for('jobs'))
+                case 'applications':
+                    return redirect(url_for('applications'))
+                case 'timecard':
+                    return redirect(url_for('timecard'))
+                case 'mentees':
+                    return redirect(url_for('mentees'))
+                case 'logout':
+                    return redirect(url_for('professor_logout'))
+                case _:
+                    return render_template('others/admin/admin_view.html')
+        return render_template( 'others/admin/admin_view.html' )
+    return redirect(url_for('errorpage'))
+
+@app.route('/admin/students', methods=['GET', 'POST'])
+def students():
+    if "email" in session:
+        cursor = db.connection.cursor()
+        cursor.execute("SELECT * FROM applied_student;")
+        student_data = cursor.fetchall()
+        student_head = cursor.description
+        column_names = tuple(row[0] for row in student_head)
+        cursor.close()
+        return render_template('others/admin/admin_table.html', data=student_data, head=column_names, type = 'student')
+    else:
+        return redirect(url_for('errorpage'))
+
+@app.route('/admin/faculty', methods=['GET', 'POST'])
+def faculty():
+    if "email" in session:
+        cursor = db.connection.cursor()
+        cursor.execute("SELECT * FROM faculty;")
+        faculty_data = cursor.fetchall()
+        faculty_head = cursor.description
+        column_names = tuple(row[0] for row in faculty_head)
+        cursor.close()
+        return render_template('others/admin/admin_table.html',data=faculty_data,head=column_names, type = 'faculty')
+    else:
+        return redirect(url_for('errorpage'))
+
+@app.route('/admin/others', methods=['GET', 'POST'])
+def others():
+    if "email" in session:
+        if request.method == 'POST':
+            if request.form['submit_button'] == 'change_email':
+                user_type = request.form['user_type']
+                return redirect(url_for('others_email_change', user_type = user_type))
+
+        cursor = db.connection.cursor()
+        cursor.execute("SELECT * FROM other;")
+        other_data = cursor.fetchall()
+        other_head = cursor.description
+        column_names = tuple(row[0] for row in other_head)
+        cursor.close()
+        return render_template('others/admin/admin_table.html',data=other_data, head=column_names)
+    else:
+        return redirect(url_for('errorpage'))
+
+@app.route('/admin/others/others_email_change/<user_type>', methods=['GET', 'POST'])
+def others_email_change(user_type):
+    if "email" in session:
+        if request.method == 'POST':
+            email = request.form['email']
+            cursor = db.connection.cursor()
+            cursor.execute(f"UPDATE other SET email = '{email}' WHERE user_type = '{user_type}';")
+            db.connection.commit()
+            cursor.close()
+            return redirect(url_for('others'))
+        return render_template('others/admin/others_email_change.html', user_type = user_type)
+    else:
+        return redirect(url_for('errorpage'))
+
+@app.route('/admin/jobs', methods=['GET', 'POST'])
+def jobs():
+    if "email" in session:
+        cursor = db.connection.cursor()
+        cursor.execute("SELECT * FROM job;")
+        job_data = cursor.fetchall()
+        job_head = cursor.description
+        column_names = tuple(row[0] for row in job_head)
+        cursor.close()
+        return render_template('others/admin/admin_table.html', data=job_data, head=column_names, type = 'job')
+    else:
+        return redirect(url_for('errorpage'))
+
+@app.route('/admin/applications', methods=['GET', 'POST'])
+def applications():
+    if "email" in session:
+        cursor = db.connection.cursor()
+        cursor.execute("SELECT * FROM application_status;")
+        application_data = cursor.fetchall()
+        application_head = cursor.description
+        column_names = tuple(row[0] for row in application_head)
+        cursor.close()
+        return render_template('others/admin/admin_table.html', data=application_data, head=column_names, type = 'application')
+    else:
+        return redirect(url_for('errorpage'))
+    
+@app.route('/admin/timecard', methods=['GET', 'POST'])
+def timecard():
+    if "email" in session:
+        cursor = db.connection.cursor()
+        cursor.execute("SELECT * FROM time_card;")
+        timecard_data = cursor.fetchall()
+        timecard_head = cursor.description
+        column_names = tuple(row[0] for row in timecard_head)
+        cursor.close()
+        return render_template('others/admin/admin_table.html', data=timecard_data, head=column_names, type = 'timecard')
+    else:
+        return redirect(url_for('errorpage'))
+
+@app.route('/admin/mentees', methods=['GET', 'POST'])
+def mentees():
+    if "email" in session:
+        cursor = db.connection.cursor()
+        cursor.execute("SELECT * FROM mentor_mentee;")
+        mentee_data = cursor.fetchall()
+        mentee_head = cursor.description
+        column_names = tuple(row[0] for row in mentee_head)
+        cursor.close()
+        return render_template('others/admin/admin_table.html', data=mentee_data, head=column_names, type = 'mentee')
+    else:
+        return redirect(url_for('errorpage'))
+
+    
+    
 
 @app.route('/<type>/logout')
 def admin_logout(type):
